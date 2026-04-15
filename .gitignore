@@ -1,5 +1,8 @@
-# Output files
-yt_batch_output/
+﻿yt_batch_output/
+instagram_audio/
+temp_audio/
+temp_audio_playwright/
+playwright_user_data/
 *.mp3
 *.flac
 *.wav
@@ -10,23 +13,14 @@ yt_batch_output/
 *.jpg
 *.png
 *.webp
-
-# Logs & manifests
 manifest.csv
 error_log.csv
 *.log
-
-# Input data (user-specific)
 links.csv
-
-# Python
+cookies.txt
 __pycache__/
 *.py[cod]
-*.pyo
 .venv/
 venv/
-*.egg-info/
-
-# OS
 .DS_Store
 Thumbs.db
