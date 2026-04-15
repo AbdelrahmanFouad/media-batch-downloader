@@ -1,127 +1,146 @@
 # 📥 Media Batch Downloader
 
-A production-grade batch downloader for **YouTube**, **Facebook**, and **Udio** audio content — built for music catalog and digital operations teams.
+Production-grade **parallel batch downloader** for YouTube, Udio, Facebook, and Instagram Reels — with multi-format audio conversion, thumbnail processing, retry logic, and manifest tracking.
 
-## ✨ Features
+## 🧰 Tools
 
-- **CSV-driven** — define URLs + identifiers in a simple `links.csv` file; no GUI required
-- **Parallel processing** — configurable concurrent workers via `--jobs` flag
-- **Atomic file delivery** — downloads happen in a hidden temp directory, then files are atomically moved to the output folder to prevent Explorer thrash and partial reads
-- **Exponential backoff & retry** — built-in resilience against network failures and rate limits
-- **Multi-format output** — converts audio to both **MP3** (192 kbps) and **FLAC** (lossless) using FFmpeg
-- **Thumbnail processing** — fetches and resizes cover art to exactly **1500×1500 px** JPEG (DSP-ready)
-- **Deduplication** — skips duplicate rows in the input CSV automatically
-- **Full manifest** — produces `manifest.csv` (successes) and `error_log.csv` (failures) for audit trails
+### `ytdown.py` — YouTube Batch Downloader *(416 lines)*
 
-## 📂 Scripts
+The most robust downloader in the collection. Designed for batch music catalog operations where reliability matters more than speed.
 
-| Script | Platform | Output |
-|--------|----------|--------|
-| `ytdown.py` | YouTube | MP3 + FLAC + 1500×1500 JPEG |
-| `fdown.py` | Facebook | MP4 ~480p via aria2c |
-| `udio.py` | Udio | WAV + JPEG |
+```
+links.csv (url, upc)
+       │
+       ▼
+┌──────────────────────────────────┐
+│  1. Metadata Extraction          │  yt-dlp --print-json
+│     • Playlist unpacking         │
+│     • Timeout-protected (30s)    │
+└──────────────┬───────────────────┘
+               ▼
+┌──────────────────────────────────┐
+│  2. Parallel Download            │  ThreadPoolExecutor
+│     • Hidden temp dir (.ytdown)  │  (no Explorer thrash)
+│     • Configurable concurrency   │
+│     • ffmpeg semaphore limiting  │
+└──────────────┬───────────────────┘
+               ▼
+┌──────────────────────────────────┐
+│  3. Audio Conversion             │  ffmpeg
+│     • → MP3 (configurable kbps)  │
+│     • → FLAC (lossless)          │
+│     • Atomic file moves          │
+└──────────────┬───────────────────┘
+               ▼
+┌──────────────────────────────────┐
+│  4. Thumbnail Processing         │
+│     • → 1500×1500 JPEG           │
+│     • Resize (no padding)        │
+└──────────────────────────────────┘
+```
 
-## 🚀 Quick Start
-
-### Prerequisites
-
+**Usage:**
 ```bash
-pip install yt-dlp
-# Also required on PATH: ffmpeg, aria2c (for fdown.py)
-```
-
-### Usage
-
-1. Create `links.csv` (no header row):
-
-```csv
-https://www.youtube.com/watch?v=dQw4w9WgXcQ,730170420888
-https://www.youtube.com/watch?v=abcdef123456,730170420999
-```
-
-2. Run:
-
-```bash
-python ytdown.py
-```
-
-3. Find output in `yt_batch_output/`:
-
-```
-yt_batch_output/
-├── 730170420888.mp3
-├── 730170420888.flac
-├── 730170420888.jpeg
-├── manifest.csv
-└── error_log.csv
-```
-
-### Advanced Options
-
-```bash
-python ytdown.py \
-  --links my_tracks.csv \
-  --outdir ./masters \
-  --jobs 4 \
-  --quality 320 \
-  --download-timeout 600
+python ytdown.py --links links.csv --outdir output --jobs 4 --quality 320
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--links` | `links.csv` | Input CSV path |
+| `--links` | `links.csv` | Input CSV (url, upc) |
 | `--outdir` | `yt_batch_output` | Output directory |
-| `--jobs` | `2` | Parallel download workers |
-| `--ffmpeg-concurrency` | `2` | Parallel FFmpeg conversions |
+| `--jobs` | `2` | Concurrent download workers |
+| `--ffmpeg-concurrency` | `2` | Concurrent FFmpeg processes |
 | `--quality` | `192` | MP3 bitrate (kbps) |
-| `--allow-playlists` | off | Allow playlist URLs |
+| `--allow-playlists` | `false` | Allow playlist URLs |
 | `--metadata-timeout` | `30` | Metadata fetch timeout (s) |
 | `--download-timeout` | `300` | Download timeout (s) |
 
-## 🔧 Architecture
+---
 
-```
-links.csv
-    │
-    ▼
-read_links_csv()         ← deduplication
-    │
-    ▼
-ThreadPoolExecutor       ← parallel workers
-    │
-    ├── yt_dlp_info()    ← metadata fetch
-    ├── yt_dlp_download()← download → .ytdown_tmp/
-    ├── convert_audio()  ← FFmpeg → MP3 + FLAC
-    ├── resize_thumbnail()← FFmpeg → 1500×1500 JPEG
-    └── move_to_final()  ← atomic rename to outdir/
-    │
-    ▼
-manifest.csv + error_log.csv
+### `udio.py` — Udio/Universal Batch Downloader *(500 lines)*
+
+Built for platforms with non-standard URLs (Udio, SoundCloud, etc.) where video IDs contain illegal Windows characters (`?`, `:`, `%`).
+
+**Key difference from ytdown.py:**
+- **Isolated temp dirs** — each download gets its own UUID-named temp folder, avoiding filename collisions
+- **WAV output** — converts to WAV (not MP3/FLAC), designed for production audio chains
+- **3000×3000 thumbnails** — DSP-grade cover art sizing
+- **Exponential backoff** — configurable retries with `2^n` wait
+- **Manifest + error CSV logging** — structured output tracking with timestamps
+
+**Usage:**
+```bash
+python udio.py --links links.csv --outdir output --jobs 3 --retries 3
 ```
 
-## 🛡️ Error Handling
+---
 
-- **Timeout expired** → logged to `error_log.csv`, processing continues
-- **Download failure** → logged, remaining rows unaffected  
-- **Missing audio** → graceful fallback, never crashes the batch
-- **Temp directory cleanup** → leftover files purged per-entry to avoid disk bloat
+### `instagram_downloader.py` — Instagram Reel Audio Extractor *(215 lines)*
+
+Two-phase pipeline using **Playwright** for URL resolution and **yt-dlp** for downloading.
+
+```
+Phase 1: Playwright (headed browser)
+    │
+    ├── Opens Instagram with persistent login session
+    ├── Navigates to each audio page URL
+    ├── Clicks into the first Reel using that audio
+    └── Captures the direct /reel/ permalink
+               │
+               ▼
+Phase 2: yt-dlp
+    │
+    ├── Downloads each Reel as WAV via yt-dlp -x
+    ├── Loops short audio to minimum 60s duration
+    └── Outputs to instagram_audio/ with manifest.csv
+```
+
+**Usage:**
+```bash
+# First run: browser opens for Instagram login (persisted)
+python instagram_downloader.py
+```
+
+---
+
+### `fdown.py` — Facebook Video Downloader *(81 lines)*
+
+Optimized for bulk Facebook video downloads at ~480p with `aria2c` acceleration.
+
+- 16x concurrent fragment downloads via aria2c
+- Cookie support for private/group videos
+- Auto-deduplication (skips existing files)
+- CSV input: `link,filename`
+
+**Usage:**
+```bash
+# Optional: place cookies.txt for private videos
+python fdown.py
+```
+
+---
 
 ## 📋 Requirements
 
 ```
 yt-dlp
-ffmpeg (system)
-aria2c (system, for fdown.py only)
-Pillow (optional fallback for thumbnails)
+playwright
+pydub
+```
+
+**System dependencies:** `ffmpeg`, `aria2c` (optional, for fdown.py)
+
+```bash
+pip install yt-dlp playwright pydub
+playwright install chromium
 ```
 
 ## 💡 Future Ideas
 
-- [ ] Resume interrupted batches using a progress checkpoint file
-- [ ] Spotify/Apple Music source support via metadata matching
-- [ ] Slack/email notification on batch completion
-- [ ] Dashboard UI for real-time download progress
+- [ ] SoundCloud batch downloader
+- [ ] Progress dashboard (Streamlit or Rich console)
+- [ ] Automatic retry queue for failed downloads
 
 ---
 
-> Built for music catalog operations — handling thousands of tracks across digital distribution pipelines.
+> Built for music catalog teams downloading thousands of tracks per week for Content ID matching and DSP delivery.
