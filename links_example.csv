@@ -1,0 +1,4 @@
+﻿# links_example.csv — input CSV format (no header, url,identifier)
+# Replace with your actual links
+https://www.youtube.com/watch?v=dQw4w9WgXcQ,730170420888
+https://www.youtube.com/watch?v=YOUTUBE_URL_2,730170420999

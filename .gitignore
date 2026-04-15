@@ -1,0 +1,32 @@
+# Output files
+yt_batch_output/
+*.mp3
+*.flac
+*.wav
+*.mp4
+*.webm
+*.m4a
+*.jpeg
+*.jpg
+*.png
+*.webp
+
+# Logs & manifests
+manifest.csv
+error_log.csv
+*.log
+
+# Input data (user-specific)
+links.csv
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
